@@ -29,6 +29,9 @@ try:
 except Exception:
     pass  # secrets.toml が無いローカル環境では何もしない
 
+# config を読み込み（プレミアム閾値など参照用）
+import config
+
 
 # ====== ニュースリンク生成 ======
 def google_news_url(query: str, after_d: date, before_d: date) -> str:
