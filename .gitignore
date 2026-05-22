@@ -1,0 +1,23 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# データキャッシュとレポートは除外
+data/cache/
+reports/
+*.html
+
+# OS固有
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Streamlit local secrets (cloud側はWeb UIで設定)
+.streamlit/secrets.toml
+
+# data/raw/ は コミット する（クラウドデプロイのため）
+# 大きなParquetファイルだが GitHub の100MB制限内に収まる想定

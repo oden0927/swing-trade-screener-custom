@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>スイングトレード スクリーニング結果 — {{ report_date }}</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; max-width: 1100px; margin: 20px auto; padding: 0 16px; color: #222; line-height: 1.55; }
+  h1 { border-bottom: 3px solid #2c5cb1; padding-bottom: 8px; }
+  h2 { color: #2c5cb1; margin-top: 30px; border-left: 5px solid #2c5cb1; padding-left: 10px; }
+  h3 { margin-top: 24px; color: #333; }
+  .regime { padding: 12px 16px; border-radius: 8px; font-weight: bold; }
+  .regime.UPTREND { background: #e7f5ec; color: #1b6f3a; }
+  .regime.BOX { background: #fff7e0; color: #8a6b00; }
+  .regime.DOWNTREND { background: #fde7e7; color: #8a1f1f; }
+  .regime.UNCLEAR { background: #efefef; color: #555; }
+  .summary { padding: 12px; background: #f6f8fb; border-radius: 8px; margin: 16px 0; }
+  .candidate { border: 1px solid #ccd; border-radius: 10px; padding: 16px 20px; margin: 18px 0; background: #fbfcfe; }
+  .candidate h3 { margin-top: 0; color: #1a3b73; }
+  .label { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px; }
+  .label.match { background: #e7f0ff; color: #1d4cb1; }
+  .label.bonus { background: #e7f5ec; color: #1b6f3a; }
+  .label.penalty { background: #fdecea; color: #8a1f1f; }
+  .label.trigger { background: #fff2cc; color: #8a6b00; }
+  .label.momentum { background: #ede7f6; color: #4527a0; }
+  .momentum-box { background: #f9f7ff; border: 1px solid #d7cdf0; border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  .momentum-box .zone { font-weight: bold; }
+  .zone-overbought { color: #c2185b; }
+  .zone-oversold { color: #2e7d32; }
+  .zone-neutral { color: #555; }
+  .zone-bullish { color: #1b6f3a; }
+  .zone-bearish { color: #8a1f1f; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #e0e3eb; font-size: 14px; }
+  th { background: #f0f3f8; }
+  .book-ref { font-size: 12px; color: #666; }
+  .alert { padding: 12px; border-radius: 8px; margin: 12px 0; }
+  .alert.warning { background: #fff7e0; color: #8a6b00; border: 1px solid #f0d68a; }
+  .alert.info { background: #e7f0ff; color: #1d4cb1; border: 1px solid #c5d4ee; }
+  .meta { color: #777; font-size: 13px; }
+  .nocandidate { padding: 24px; background: #fff7e0; border-radius: 12px; text-align: center; }
+  .premium-banner { background: linear-gradient(135deg, #fff4d4 0%, #ffe9b0 100%); border: 2px solid #d4a017; border-radius: 10px; padding: 14px 18px; margin: 16px 0; }
+  .premium-banner .star { font-size: 18px; color: #d4a017; }
+  .premium-banner strong { color: #8a6b00; }
+  .candidate.premium { border: 2px solid #d4a017; background: #fffdf4; box-shadow: 0 2px 6px rgba(212, 160, 23, 0.15); }
+  .candidate.premium h3 { color: #8a6b00; }
+  .label.premium { background: #d4a017; color: #ffffff; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>スイングトレード スクリーニング結果</h1>
+<p class="meta">{{ report_date }} 実行 / 候補 {{ candidates|length }} 件（日経225・JPX400相当から買い条件を満たすもの全件）</p>
+
+<h2>全体地合い（マーケット環境）</h2>
+<div class="regime {{ market_regime }}">
+  <p>判定: <strong>{{ market_regime_label }}</strong>（信頼度 {{ "%.0f"|format(market_confidence * 100) }}%）</p>
+  <p style="font-weight:normal;">{{ market_regime_note }}</p>
+</div>
+
+{% if market_regime == "DOWNTREND" %}
+<div class="alert warning">
+  <strong>下落相場と判定されています。</strong><br>
+  本書8時限目「待つも相場」: 個別銘柄が良く見えても、地合いが下落のときは買い候補が機能しにくくなります。
+  「待つ技術」が課題と本書も繰り返し説いています。次のチャンスまでメンタルを温存しましょう。
+</div>
+{% elif market_regime == "BOX" %}
+<div class="alert info">
+  ボックス相場です。本書ではボックス上限ブレイク（パターン②）に厳選してエントリーする方針が推奨されています。
+</div>
+{% endif %}
+
+{% if premium_count > 0 %}
+<div class="premium-banner">
+  <p style="margin:0;"><span class="star">★</span> 本日の<strong>プレミアム候補</strong>：<strong>{{ premium_count }}件</strong>（スコア {{ premium_threshold }} 以上）</p>
+  <p style="margin:6px 0 0; font-size:13px; color:#8a6b00;">
+    3年実証データで勝率 56.6%、期待値 +1.10% の品質ジャンプを示した候補群です。
+    通常候補（52.4%、+0.65%）と比べて約2倍の期待値で、特に注目すべき銘柄です。
+  </p>
+</div>
+{% endif %}
+
+{% if candidates|length == 0 %}
+<div class="nocandidate">
+  <h2 style="border:none;padding:0;">本日の買い候補は 0 件です</h2>
+  <p>条件に合致する銘柄がありませんでした。本書のメッセージを思い出してください：</p>
+  <blockquote>
+    <p><em>「必ずチャンスは来るのだから急がず待っていよう！」</em>（8時限目02⑥ p.247）</p>
+  </blockquote>
+</div>
+{% endif %}
+
+{% for c in candidates %}
+<div class="candidate{% if c.score >= premium_threshold %} premium{% endif %}">
+  <h3>{{ loop.index }}. {{ c.display_code }} {{ c.name }} <span class="meta">({{ c.sector }})</span>
+    {% if c.score >= premium_threshold %}<span class="label premium">★ プレミアム</span>{% endif %}
+  </h3>
+  <p><strong>総合スコア: {{ "%.1f"|format(c.score) }}</strong>
+     / 個別環境: <span class="label match">{{ c.environment.label }}</span>
+     {% if c.earnings_sensitive %}<span class="label penalty">サプライズ業種・日跨ぎ注意</span>{% endif %}
+  </p>
+
+  {% if chart_map and c.code in chart_map %}
+  <div style="text-align:center; margin: 12px 0;">
+    <img src="data:image/png;base64,{{ chart_map[c.code] }}"
+         alt="{{ c.display_code }} チャート"
+         style="max-width:100%; height:auto; border:1px solid #ddd; border-radius:6px;">
+    <div class="meta" style="margin-top:4px;">
+      ローソク足：<span style="color:#d63b3b">赤=陽線</span> / <span style="color:#1c64b8">青=陰線</span>
+      ｜ MA：<span style="color:#9c27b0">紫=5MA</span> / <span style="color:#e89a3c">橙=20MA</span> / <span style="color:#00897b">緑=60MA</span>
+      ｜ 売買：<span style="color:#000">黒線=エントリー</span> / <span style="color:#c2185b">桃破線=損切</span> / <span style="color:#ff8f00">橙破線=利確</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <h4>① 該当する本書パターン</h4>
+  <ul>
+    {% for m in c.pattern.matches %}
+    <li><span class="label match">パターン</span> <strong>{{ m.label }}</strong>: {{ m.description }} <span class="book-ref">({{ m.book_reference }})</span></li>
+    {% endfor %}
+    {% for b in c.pattern.bonus %}
+    <li><span class="label bonus">加点</span> {{ b.label }}: {{ b.description }} <span class="book-ref">({{ b.book_reference }})</span></li>
+    {% endfor %}
+    {% for p in c.pattern.penalties %}
+    <li><span class="label penalty">減点</span> {{ p.label }}: {{ p.description }} <span class="book-ref">({{ p.book_reference }})</span></li>
+    {% endfor %}
+  </ul>
+
+  <h4>モメンタム指標（参考情報・スコア未反映）</h4>
+  <div class="momentum-box">
+    {% set rsi = c.momentum.get('rsi') %}
+    {% set macd = c.momentum.get('macd') %}
+    {% set macd_sig = c.momentum.get('macd_signal') %}
+    {% set macd_hist = c.momentum.get('macd_hist') %}
+    <span class="label momentum">RSI</span>
+    {% if rsi is not none and rsi == rsi %}
+      <strong>{{ "%.1f"|format(rsi) }}</strong>
+      （
+      {% set zone = c.rsi_zone %}
+      <span class="zone
+        {%- if zone == '過買い圏' %} zone-overbought
+        {%- elif zone == '過売り圏' %} zone-oversold
+        {%- elif zone == '中立' %} zone-neutral
+        {%- elif zone == 'やや強気' %} zone-bullish
+        {%- else %} zone-bearish{% endif %}">{{ zone }}</span>
+      ）<span class="meta">基準: 70+過買い / 30-過売り / 約50中立</span>
+    {% else %}
+      —
+    {% endif %}
+    <br>
+    <span class="label momentum">MACD(12,26,9)</span>
+    {% if macd is not none and macd == macd and macd_sig is not none and macd_sig == macd_sig %}
+      MACD <strong>{{ "%.2f"|format(macd) }}</strong> /
+      Signal <strong>{{ "%.2f"|format(macd_sig) }}</strong> /
+      Hist <strong>{{ "%.2f"|format(macd_hist) }}</strong>
+      （
+      <span class="zone {% if macd > macd_sig %}zone-bullish{% else %}zone-bearish{% endif %}">
+        {{ c.macd_signal_status }}
+      </span>
+      ）
+    {% else %}
+      —
+    {% endif %}
+  </div>
+
+  <h4>② 買いトリガー（執行タイミング）</h4>
+  <ul>
+    {% for t in c.triggers %}
+    <li><span class="label trigger">トリガー</span> <strong>{{ t.signal_type }}</strong>: {{ t.description }} <span class="book-ref">({{ t.book_reference }})</span></li>
+    {% endfor %}
+  </ul>
+
+  <h4>③ 売買進め方（本書5時限目に準拠）</h4>
+  <table>
+    <tr><th>項目</th><th>値</th><th>根拠</th></tr>
+    <tr><td>エントリー価格</td><td>{{ "%.0f"|format(c.risk_reward.entry) }}円</td><td>直近終値</td></tr>
+    <tr><td>損切ライン（逆指値）</td><td>{{ "%.0f"|format(c.risk_reward.stop_loss) }}円（{{ "%.1f"|format(c.risk_reward.risk_pct * 100) }}%下）</td><td>{{ c.risk_reward.stop_basis }}</td></tr>
+    <tr><td>利確目標①</td><td>{{ "%.0f"|format(c.risk_reward.take_profit) }}円（{{ "%.1f"|format(c.risk_reward.reward_pct * 100) }}%上）</td><td>{{ c.risk_reward.target_basis }}</td></tr>
+    <tr><td>リスクリワード比</td><td>1 : {{ "%.2f"|format(c.risk_reward.rr_ratio) }}</td><td>本書推奨1:2以上</td></tr>
+  </table>
+
+  <h4>④ 売り（決済）の判断基準</h4>
+  <ul>
+    <li><strong>利確トリガー</strong>: 過去高値到達 / 包み足・否定陰線出現 / 5日MA陰線割れ / 上昇開始から7〜9日目（5時限目01）</li>
+    <li><strong>損切トリガー</strong>: 上記の損切ライン割れで<strong>逆指値発注で自動執行</strong>（5時限目02④）</li>
+    <li><strong>トレーリングストップ</strong>: 含み益が出たら損切位置の<em>引き上げのみ</em>OK（5時限目03⑦）</li>
+    <li><strong>分割売買</strong>: 想定資金を<strong>3分割</strong>、1回目で全額入れない（4時限目04 / 8時限目03②）</li>
+  </ul>
+
+  <h4>⑤ メンタル運用上の注意</h4>
+  <ul>
+    <li>「頂点で利確」は結果論。本書5時限目01⑤ p.169 参照</li>
+    <li>狙ったとおりに動かなければ素早く頭を切り替える（4時限目03 p.148）</li>
+    <li>監視銘柄を増やしすぎない、得意なパターンに絞る（8時限目02 p.241-247）</li>
+  </ul>
+</div>
+{% endfor %}
+
+<hr>
+<p class="meta">本レポートは「世界一やさしい スイングトレードの教科書1年生」（ロット著）の記述を元に、AIが自動抽出・整理した売買候補と参考情報です。最終的な投資判断はご自身の責任で行ってください。</p>
+
+</body>
+</html>
