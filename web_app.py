@@ -266,24 +266,28 @@ with tab_screen:
                             st.markdown(f"- 🟡 `{t.signal_type}`: {t.description}")
                             st.caption(f"　 {t.book_reference}")
 
-                        st.markdown("**上位足→下位足分析**（参考・スコア未反映）")
-                        mtf = c.multi_timeframe
-                        m_lbl = mtf.get("monthly", "—")
-                        w_lbl = mtf.get("weekly", "—")
-                        d_lbl = mtf.get("daily", "—")
-                        tf_emoji = {"UPTREND": "🟢", "DOWNTREND": "🔴", "BOX": "🟡", "UNCLEAR": "⚪"}
-                        st.markdown(
-                            f"- 月足: {tf_emoji.get(m_lbl, '⚪')} **{m_lbl}** ｜ "
-                            f"週足: {tf_emoji.get(w_lbl, '⚪')} **{w_lbl}** ｜ "
-                            f"日足: {tf_emoji.get(d_lbl, '⚪')} **{d_lbl}**"
-                        )
-                        st.caption(f"　整合性: {c.timeframe_alignment_label}（書籍 1時限目03 p.49）")
+                        # 上位足→下位足分析（getattr で安全アクセス、属性が無い古い候補でも動作）
+                        mtf = getattr(c, "multi_timeframe", None) or {}
+                        if mtf:
+                            st.markdown("**上位足→下位足分析**（参考・スコア未反映）")
+                            m_lbl = mtf.get("monthly", "—")
+                            w_lbl = mtf.get("weekly", "—")
+                            d_lbl = mtf.get("daily", "—")
+                            tf_emoji = {"UPTREND": "🟢", "DOWNTREND": "🔴", "BOX": "🟡", "UNCLEAR": "⚪"}
+                            st.markdown(
+                                f"- 月足: {tf_emoji.get(m_lbl, '⚪')} **{m_lbl}** ｜ "
+                                f"週足: {tf_emoji.get(w_lbl, '⚪')} **{w_lbl}** ｜ "
+                                f"日足: {tf_emoji.get(d_lbl, '⚪')} **{d_lbl}**"
+                            )
+                            align_label = getattr(c, "timeframe_alignment_label", "—")
+                            st.caption(f"　整合性: {align_label}（書籍 1時限目03 p.49）")
 
                         st.markdown("**モメンタム指標**（参考・スコア未反映）")
-                        rsi_val = c.momentum.get("rsi")
-                        macd_val = c.momentum.get("macd")
-                        macd_sig_val = c.momentum.get("macd_signal")
-                        macd_hist_val = c.momentum.get("macd_hist")
+                        momentum_dict = getattr(c, "momentum", None) or {}
+                        rsi_val = momentum_dict.get("rsi")
+                        macd_val = momentum_dict.get("macd")
+                        macd_sig_val = momentum_dict.get("macd_signal")
+                        macd_hist_val = momentum_dict.get("macd_hist")
                         if rsi_val is not None and rsi_val == rsi_val:
                             st.markdown(f"- 🟣 RSI(14): **{rsi_val:.1f}** ({c.rsi_zone})")
                             st.caption("　 基準: 70+過買い / 30-過売り / 約50中立")
