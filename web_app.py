@@ -101,10 +101,11 @@ except Exception:
 
 
 # ===== タブ切り替え =====
-tab_screen, tab_history, tab_position = st.tabs([
+tab_screen, tab_history, tab_position, tab_quiz = st.tabs([
     "🔍 スクリーニング",
     "📈 銘柄シグナル履歴",
     "📊 保有銘柄チェック",
+    "🎯 クイズモード",
 ])
 
 
@@ -649,3 +650,185 @@ with tab_position:
     else:
         st.info("銘柄情報を入力して「📊 売り判断を実行」を押してください")
 
+
+# ============================================================
+# タブ4: クイズモード（過去シグナルで予想する練習）
+# ============================================================
+with tab_quiz:
+    st.subheader("🎯 クイズモード（過去シグナルで予想する練習）")
+    st.markdown("""
+    過去のスクリーニング日付を選び、その時点で出ていた候補のチャートを **未来非表示** で表示します。
+    自分で「上がる/下がる」を予想してから「答えを表示」ボタンを押して、実際の値動きと比較しましょう。
+
+    👁️ **コツ**: 予想を口に出してから答えを見ると、自分の判断パターンが見えてきます。
+    """)
+
+    col_q1, col_q2 = st.columns([2, 1])
+    with col_q1:
+        quiz_date = st.date_input(
+            "クイズ基準日（過去日付）",
+            value=date.today() - timedelta(days=60),
+            max_value=LATEST_DATA_DATE - timedelta(days=15),
+            help="この日のシグナルでクイズします。15営業日以上前を推奨（答えとして表示できる未来データが必要）",
+            key="quiz_date",
+        )
+        quiz_limit = st.number_input(
+            "クイズ問題数（最大）",
+            min_value=1,
+            max_value=50,
+            value=10,
+            step=1,
+            help="この日の候補から上位N件をクイズに",
+            key="quiz_limit",
+        )
+    with col_q2:
+        st.markdown("**クイズの仕組み**")
+        st.markdown("""
+        1. 基準日を選択
+        2. クイズを開始
+        3. 各候補のチャートを見て予想
+        4. 「答え表示」で実際の値動き確認
+        5. **当たりハズレを通じて目を養う**
+        """)
+
+    quiz_run = st.button("🎯 クイズを開始", type="primary", key="quiz_run")
+
+    if quiz_run:
+        st.session_state["quiz_active"] = True
+        st.session_state["quiz_target_date"] = quiz_date
+        st.session_state["quiz_target_limit"] = int(quiz_limit)
+        # 過去の回答状態をリセット
+        keys_to_clear = [k for k in st.session_state.keys() if k.startswith("quiz_reveal_")]
+        for k in keys_to_clear:
+            del st.session_state[k]
+
+    if st.session_state.get("quiz_active"):
+        target_date = st.session_state.get("quiz_target_date", quiz_date)
+        target_limit = st.session_state.get("quiz_target_limit", int(quiz_limit))
+
+        with st.spinner(f"{target_date} 時点のスクリーニング中..."):
+            from src.screener import screen_at
+            from src.chart_renderer import render_as_base64
+            from src import data_fetcher as _df
+
+            try:
+                quiz_candidates = screen_at(
+                    cutoff_date=target_date,
+                    max_candidates=target_limit if target_limit > 0 else None,
+                    show_progress=False,
+                )
+            except Exception as exc:
+                st.error(f"スクリーニング失敗: {exc}")
+                quiz_candidates = []
+
+        if not quiz_candidates:
+            st.warning("この日付では候補が見つかりませんでした。別の日付をお試しください。")
+        else:
+            st.success(f"📅 {target_date} の候補 {len(quiz_candidates)} 件をクイズに用意しました")
+            st.markdown("---")
+
+            daily_for_charts = _df.load_daily()
+
+            for i, c in enumerate(quiz_candidates, 1):
+                warn = " ⚠️" if c.earnings_sensitive else ""
+                premium_mark = "🌟 " if c.score >= getattr(config, "PREMIUM_SCORE_THRESHOLD", 80) else ""
+                reveal_key = f"quiz_reveal_{c.code}_{i}"
+                is_revealed = st.session_state.get(reveal_key, False)
+
+                with st.container():
+                    st.markdown(f"### {premium_mark}問題 {i}: {c.display_code} {c.name}　〔{c.sector}〕{warn}")
+                    st.markdown(
+                        f"**スコア {c.score:.0f}** / 個別環境: {c.environment.label} / "
+                        f"地合い: {c.market_regime}"
+                    )
+
+                    # パターン・トリガー情報を簡潔に
+                    patterns_str = ", ".join(m.label for m in c.pattern.matches if m.score > 0)
+                    triggers_str = ", ".join(t.signal_type for t in c.triggers)
+                    if patterns_str:
+                        st.caption(f"📋 該当パターン: {patterns_str}")
+                    if triggers_str:
+                        st.caption(f"🎯 トリガー: {triggers_str}")
+
+                    # クイズ用チャート（未来非表示）
+                    chart_caption = "👁️ シグナル日までのチャート（この後どうなるか予想してください）"
+                    if is_revealed:
+                        chart_caption = "✅ 答え：シグナル日 +30日後までの実績"
+
+                    with st.spinner(f"問題 {i} のチャート生成中..."):
+                        b64 = render_as_base64(
+                            c, daily_for_charts,
+                            lookback=120,
+                            lookforward=30,
+                            force_hide_future=not is_revealed,
+                        )
+                    if b64:
+                        st.markdown(
+                            f'<img src="data:image/png;base64,{b64}" '
+                            f'style="width:100%; max-width:900px; border:1px solid #ddd; border-radius:6px;">',
+                            unsafe_allow_html=True,
+                        )
+                        st.caption(chart_caption)
+
+                    # 答え表示ボタン or 実績表示
+                    if not is_revealed:
+                        if st.button(f"💡 問題 {i} の答えを表示", key=f"reveal_btn_{c.code}_{i}"):
+                            st.session_state[reveal_key] = True
+                            st.rerun()
+                    else:
+                        # 実績計算
+                        sub = daily_for_charts[daily_for_charts["Code"].astype(str) == str(c.code)].sort_values("Date")
+                        sub["Date"] = pd.to_datetime(sub["Date"])
+                        signal_ts = pd.Timestamp(target_date)
+                        entry_close = sub[sub["Date"] <= signal_ts]["AdjC"].iloc[-1] if not sub[sub["Date"] <= signal_ts].empty else None
+                        future_df = sub[sub["Date"] > signal_ts].head(30)
+
+                        if entry_close is not None and not future_df.empty:
+                            close_5d = future_df["AdjC"].iloc[4] if len(future_df) >= 5 else None
+                            close_10d = future_df["AdjC"].iloc[9] if len(future_df) >= 10 else None
+                            close_20d = future_df["AdjC"].iloc[19] if len(future_df) >= 20 else None
+                            max_high = future_df["AdjH"].max()
+                            min_low = future_df["AdjL"].min()
+
+                            col_a, col_b, col_c, col_d = st.columns(4)
+                            if close_5d:
+                                col_a.metric("5日後", f"{close_5d:.0f}", f"{(close_5d-entry_close)/entry_close*100:+.2f}%")
+                            if close_10d:
+                                col_b.metric("10日後", f"{close_10d:.0f}", f"{(close_10d-entry_close)/entry_close*100:+.2f}%")
+                            if close_20d:
+                                col_c.metric("20日後", f"{close_20d:.0f}", f"{(close_20d-entry_close)/entry_close*100:+.2f}%")
+                            col_d.metric(
+                                "30日内最大",
+                                f"+{(max_high-entry_close)/entry_close*100:.1f}% / "
+                                f"{(min_low-entry_close)/entry_close*100:+.1f}%",
+                                help="30日内 最高値の上昇率 / 最安値の下落率",
+                            )
+
+                            # 結果コメント
+                            if close_10d:
+                                ret_10d = (close_10d - entry_close) / entry_close * 100
+                                if ret_10d >= 3:
+                                    st.success(f"🎯 10日後 +{ret_10d:.1f}% — 大成功シグナル！")
+                                elif ret_10d >= 0:
+                                    st.info(f"○ 10日後 +{ret_10d:.1f}% — 軽くプラス")
+                                elif ret_10d >= -3:
+                                    st.warning(f"△ 10日後 {ret_10d:.1f}% — 軽くマイナス")
+                                else:
+                                    st.error(f"× 10日後 {ret_10d:.1f}% — 損切ライン到達相当")
+
+                        # 「再度隠す」ボタン
+                        if st.button(f"🔄 問題 {i} を再度隠す", key=f"hide_btn_{c.code}_{i}"):
+                            st.session_state[reveal_key] = False
+                            st.rerun()
+
+                    st.markdown("---")
+
+            # 全体終了ボタン
+            if st.button("🏁 クイズを終了する", key="quiz_end"):
+                st.session_state["quiz_active"] = False
+                keys_to_clear = [k for k in st.session_state.keys() if k.startswith("quiz_reveal_")]
+                for k in keys_to_clear:
+                    del st.session_state[k]
+                st.rerun()
+    else:
+        st.info("「🎯 クイズを開始」を押すと、選んだ日付の過去シグナルをクイズ形式で表示します")

@@ -259,11 +259,15 @@ def render_as_base64(
     daily_df: pd.DataFrame,
     lookback: int = 120,
     lookforward: int = 30,
+    force_hide_future: bool = False,
 ) -> Optional[str]:
     """HTML埋め込み用に base64 文字列を返す。
 
     candidate.eval_date がデータ最新日より十分過去なら「シグナル日からN日後の動き」も含めて
     描画し、縦点線でシグナル日を示す。最新時点のシグナルなら通常通り直近 lookback 日のみ。
+
+    force_hide_future=True を指定すると、過去日付であってもシグナル日以降を非表示にする
+    （クイズモード用）。
     """
     if mpf is None:
         return None
@@ -277,6 +281,9 @@ def render_as_base64(
     is_past = bool(raw_signal is not None and (latest_in_data - raw_signal).days > 5)
     signal_date = raw_signal if is_past else None
     effective_lookforward = lookforward if is_past else 0
+    # クイズモードでは未来を強制的に隠す
+    if force_hide_future:
+        effective_lookforward = 0
 
     df = _prepare_ohlc(sub, lookback=lookback, signal_date=signal_date, lookforward=effective_lookforward)
     if df is None or len(df) < 30:
@@ -300,9 +307,9 @@ def render_as_base64(
         linewidths=[1.6, 1.4, 1.4],
     )
 
-    # シグナル日を縦線で表示（過去日の場合）
+    # シグナル日を縦線で表示（過去日の場合、クイズモードでは表示しない）
     vlines_dict = None
-    if is_past and signal_date is not None:
+    if is_past and signal_date is not None and not force_hide_future:
         # signal_date の前後で日付差が最小の日を選ぶ（実営業日が一致しないケースの安全策）
         try:
             closest_idx = df.index[df.index <= signal_date][-1]
@@ -317,7 +324,9 @@ def render_as_base64(
             vlines_dict = None
 
     title_extra = ""
-    if is_past:
+    if force_hide_future and raw_signal is not None:
+        title_extra = f" ｜ シグナル日: {raw_signal.strftime('%Y-%m-%d')}（この日時点のチャート）"
+    elif is_past:
         title_extra = f" ｜ シグナル日: {raw_signal.strftime('%Y-%m-%d')}（縦点線、以降は実績）"
     title = (
         f"{candidate.display_code} {candidate.name} "
