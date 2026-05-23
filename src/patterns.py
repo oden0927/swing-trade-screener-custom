@@ -280,6 +280,35 @@ def evaluate(df: pd.DataFrame, env: EnvironmentResult) -> PatternResult:
             score=12.0,
         ))
 
+    # ============================================================
+    # 【B6】ボリンジャーバンド スクイーズ→エクスパンション (+10)【2026-05-23 新規】
+    # 「ボラ低下→拡張」のトレンド誕生シグナル
+    # 3年実証: 4,410件、勝率56.4%、+1.24% (ベース+2.3pt、件数7.0%)
+    # 書籍3時限目07 p.98-99 のボリンジャーバンド理論を実装
+    # ============================================================
+    bb_squeeze_to_expansion = latest.get("BB_SqueezeToExpansion")
+    if bb_squeeze_to_expansion is not None and not pd.isna(bb_squeeze_to_expansion) and bool(bb_squeeze_to_expansion):
+        result.bonus.append(PatternMatch(
+            "B6_BB_TrendBirth", "ボリンジャー スクイーズ→エクスパンション",
+            "ボラ低下からの拡張（トレンド誕生シグナル）",
+            "3時限目07 p.98-99 / カスタム版実証3年: 勝率56.4%・+1.24% (ベース+2.3pt)",
+            score=10.0,
+        ))
+
+    # ============================================================
+    # 【N5】+2σ超過熱ペナルティ (-5)【2026-05-23 新規】
+    # 価格が +2σ より上にある = 急騰しすぎ = 新規買いとして弱い
+    # 3年実証: 4,356件、勝率49.9%、+0.43% (ベース-4.2pt、件数6.9%)
+    # ============================================================
+    bb_up2 = latest.get("BB_UP2")
+    if bb_up2 is not None and not pd.isna(bb_up2) and close > bb_up2:
+        result.penalties.append(PatternMatch(
+            "N5_BB_Overheated", "ボリンジャー +2σ超（過熱）",
+            f"終値{close:.0f}が+2σ({bb_up2:.0f})を超え、急騰しすぎで新規買いには遅い",
+            "3時限目07 p.98-99 / カスタム版実証3年: 勝率49.9%・+0.43% (ベース-4.2pt)",
+            score=5.0,
+        ))
+
     # 減点: MAからの上方乖離
     # 3年10,426件バックテストに基づく再調整（2026-05-22）:
     #   20%超     : 勝率36.3%, 平均-1.39% → screener.py で**ハード除外**

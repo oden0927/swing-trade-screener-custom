@@ -358,6 +358,7 @@ def summarize(df: pd.DataFrame, holding_days_list: List[int]) -> str:
             "トレンド中盤",           # N2
             "弱いローソク足出現",     # N3
             "パーフェクトオーダー完成 + 過買い圏",  # B3_Caution
+            "ボリンジャー +2σ超",     # N5_BB_Overheated (-5) [2026-05-23]
         ]
         for key in penalty_keys:
             sub = df[df["penalties"].fillna("").str.contains(key, regex=False)].dropna(subset=[col])
@@ -408,6 +409,7 @@ def summarize(df: pd.DataFrame, holding_days_list: List[int]) -> str:
             "パーフェクトオーダー形成直後（質確認済）",  # B3_Quality (+12)
             "戻り上昇兆候のローソク足",           # B4 (+12)
             "上位足→下位足 全足一致上昇",         # B5_AlignedUp (+15) [2026-05-23]
+            "ボリンジャー スクイーズ→エクスパンション",  # B6_BB_TrendBirth (+10) [2026-05-23]
         ]:
             sub = df[df["bonuses"].fillna("").str.contains(key, regex=False)].dropna(subset=[col])
             if sub.empty:

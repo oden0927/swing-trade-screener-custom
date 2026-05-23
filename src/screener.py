@@ -76,6 +76,32 @@ class Candidate:
         return "シグナル上抜け（強気）" if macd > sig else "シグナル下抜け（弱気）"
 
     @property
+    def bb_status_label(self) -> str:
+        """ボリンジャーバンドの状態ラベル。"""
+        close = self.risk_reward.entry if self.risk_reward and hasattr(self.risk_reward, 'entry') else None
+        up2 = self.momentum.get("bb_up2")
+        dn2 = self.momentum.get("bb_dn2")
+        mid = self.momentum.get("bb_mid")
+        if close is None or up2 is None or pd.isna(up2):
+            return "—"
+        labels = []
+        if self.momentum.get("bb_squeeze_to_expansion"):
+            labels.append("🟢 スクイーズ→エクスパンション")
+        elif self.momentum.get("bb_expansion"):
+            labels.append("📈 エクスパンション")
+        elif self.momentum.get("bb_squeeze"):
+            labels.append("🟡 スクイーズ")
+        if close > up2:
+            labels.append("🔴 +2σ超(過熱)")
+        elif close < dn2:
+            labels.append("🔵 -2σ未満(過売り)")
+        elif close > mid:
+            labels.append("中央〜+2σ")
+        else:
+            labels.append("-2σ〜中央")
+        return " ｜ ".join(labels)
+
+    @property
     def timeframe_alignment_label(self) -> str:
         """上位足→下位足アライメントの日本語ラベル。"""
         align = self.multi_timeframe.get("alignment", "MIXED")
@@ -180,6 +206,14 @@ def _evaluate_one(
         "macd": float(last_row.get("MACD", float("nan"))),
         "macd_signal": float(last_row.get("MACD_Signal", float("nan"))),
         "macd_hist": float(last_row.get("MACD_Hist", float("nan"))),
+        # ボリンジャーバンド指標
+        "bb_mid": float(last_row.get("BB_MID", float("nan"))),
+        "bb_up2": float(last_row.get("BB_UP2", float("nan"))),
+        "bb_dn2": float(last_row.get("BB_DN2", float("nan"))),
+        "bb_width_pct": float(last_row.get("BB_WidthPct", float("nan"))),
+        "bb_expansion": bool(last_row.get("BB_Expansion", False)) if pd.notna(last_row.get("BB_Expansion")) else False,
+        "bb_squeeze": bool(last_row.get("BB_Squeeze", False)) if pd.notna(last_row.get("BB_Squeeze")) else False,
+        "bb_squeeze_to_expansion": bool(last_row.get("BB_SqueezeToExpansion", False)) if pd.notna(last_row.get("BB_SqueezeToExpansion")) else False,
     }
     # multi_timeframe は score 計算前に計算済み（B5_AlignedUp 加点のため）
 

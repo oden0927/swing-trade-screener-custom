@@ -83,6 +83,43 @@ def add_macd(
     return out
 
 
+# ----------------- ボリンジャーバンド -----------------【カスタム版 2026-05-23】
+def add_bollinger_bands(
+    df: pd.DataFrame,
+    price_col: str = "AdjC",
+    period: int = 20,
+) -> pd.DataFrame:
+    """20日 ±1σ/±2σ/±3σ のボリンジャーバンドを追加。
+
+    また、バンド幅（BB_Width）とその20日/60日平均、エクスパンション/スクイーズ判定を追加。
+    """
+    out = df.copy()
+    ma = out[price_col].rolling(period).mean()
+    sd = out[price_col].rolling(period).std()
+    out["BB_MID"] = ma
+    out["BB_UP1"] = ma + sd
+    out["BB_UP2"] = ma + sd * 2
+    out["BB_UP3"] = ma + sd * 3
+    out["BB_DN1"] = ma - sd
+    out["BB_DN2"] = ma - sd * 2
+    out["BB_DN3"] = ma - sd * 3
+
+    # バンド幅と相対幅（価格比）
+    out["BB_Width"] = out["BB_UP2"] - out["BB_DN2"]
+    out["BB_WidthPct"] = out["BB_Width"] / ma  # 価格比、銘柄横断比較可能
+    out["BB_WidthPct_avg60"] = out["BB_WidthPct"].rolling(60).mean()
+
+    # エクスパンション: 現在のバンド幅が60日平均より10%以上大きい
+    out["BB_Expansion"] = out["BB_WidthPct"] > out["BB_WidthPct_avg60"] * 1.1
+    # スクイーズ: 現在のバンド幅が60日平均より15%以上小さい
+    out["BB_Squeeze"] = out["BB_WidthPct"] < out["BB_WidthPct_avg60"] * 0.85
+    # スクイーズ→エクスパンション: 直近10日内に3日以上スクイーズ + 現在エクスパンション
+    out["BB_was_squeeze_recently"] = out["BB_Squeeze"].rolling(10).sum() >= 3
+    out["BB_SqueezeToExpansion"] = out["BB_was_squeeze_recently"] & out["BB_Expansion"]
+
+    return out
+
+
 # ----------------- 出来高指標 -----------------
 def add_volume_metrics(df: pd.DataFrame, volume_col: str = "AdjVo", period: int = 20) -> pd.DataFrame:
     out = df.copy()
@@ -165,5 +202,6 @@ def enrich_one(df: pd.DataFrame) -> pd.DataFrame:
     df = add_ichimoku(df)
     df = add_rsi(df)
     df = add_macd(df)
+    df = add_bollinger_bands(df)
     df = add_volume_metrics(df)
     return df

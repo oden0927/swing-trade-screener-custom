@@ -75,14 +75,25 @@ def _build_style() -> dict:
 
 def _build_momentum_addplots(df: pd.DataFrame) -> list:
     """RSI（panel=2）と MACD（panel=3）のサブパネル用 addplot を生成。
+    また、メインチャート(panel=0)にボリンジャーバンド (+2σ/-2σ) を重ねる。
 
-    panel 0 = メインチャート（ローソク足+MA）
+    panel 0 = メインチャート（ローソク足+MA+ボリンジャー）
     panel 1 = 出来高
     panel 2 = RSI（70/30/50 ライン付き）
     panel 3 = MACD（MACD線+シグナル線+ヒストグラム）
     """
     addplots = []
     n = len(df)
+
+    # ----- メインパネル: ボリンジャーバンド +2σ/-2σ (薄い線) -----
+    if "BB_UP2" in df.columns and df["BB_UP2"].notna().any():
+        addplots.append(mpf.make_addplot(
+            df["BB_UP2"], panel=0, color="#9e9e9e", width=0.7, linestyle="--", alpha=0.6,
+        ))
+    if "BB_DN2" in df.columns and df["BB_DN2"].notna().any():
+        addplots.append(mpf.make_addplot(
+            df["BB_DN2"], panel=0, color="#9e9e9e", width=0.7, linestyle="--", alpha=0.6,
+        ))
 
     # ----- RSI パネル（panel=2） -----
     rsi_col = f"RSI{config.RSI_PERIOD}"

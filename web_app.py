@@ -298,6 +298,17 @@ with tab_screen:
                                 f"Sig **{macd_sig_val:.2f}** / Hist **{macd_hist_val:.2f}**"
                             )
                             st.caption(f"　 {c.macd_signal_status}")
+                        # ボリンジャーバンド状態 (新規 2026-05-23)
+                        bb_up2 = momentum_dict.get("bb_up2")
+                        bb_dn2 = momentum_dict.get("bb_dn2")
+                        bb_mid = momentum_dict.get("bb_mid")
+                        if bb_up2 is not None and bb_up2 == bb_up2 and bb_dn2 is not None and bb_dn2 == bb_dn2:
+                            bb_status = getattr(c, "bb_status_label", "—")
+                            st.markdown(
+                                f"- 🟣 ボリンジャー(20): 中央 **{bb_mid:.0f}** / "
+                                f"+2σ **{bb_up2:.0f}** / -2σ **{bb_dn2:.0f}**"
+                            )
+                            st.caption(f"　 状態: {bb_status}")
 
                     with col_r:
                         st.markdown("**③ 売買進め方**")
