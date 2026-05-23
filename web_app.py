@@ -101,7 +101,11 @@ except Exception:
 
 
 # ===== タブ切り替え =====
-tab_screen, tab_history = st.tabs(["🔍 スクリーニング", "📈 銘柄シグナル履歴"])
+tab_screen, tab_history, tab_position = st.tabs([
+    "🔍 スクリーニング",
+    "📈 銘柄シグナル履歴",
+    "📊 保有銘柄チェック",
+])
 
 
 # ============================================================
@@ -476,4 +480,172 @@ with tab_history:
     else:
         st.info("銘柄コードまたは銘柄名を入力して「シグナル履歴を検索」を押してください")
 
+
+# ============================================================
+# タブ3: 保有銘柄チェック（書籍5時限目 利確基準の自動判定）
+# ============================================================
+with tab_position:
+    st.subheader("📊 保有銘柄チェック（売り判断シグナル）")
+    st.markdown("""
+    エントリー済の銘柄について、書籍5時限目に基づく**売り判断シグナル**を自動判定します。
+
+    検出する売りシグナル:
+    - 🔴 **損切ライン到達** (即時損切)
+    - 🟢 **利確目標到達** (RR比達成)
+    - 🟠 **過去高値到達** (20日/60日/250日)
+    - 🟡 **上昇日数 7-9日** (短期トレーダー利確時期)
+    - 🔴 **5MA陰線割れ** (短期トレンド崩れ)
+    - 🟡 **弱いローソク足** (包み足/宵の明星)
+    """)
+
+    col_input1, col_input2 = st.columns([1, 1])
+    with col_input1:
+        pos_code = st.text_input(
+            "銘柄コード（4桁または5桁）",
+            value="",
+            help="例: 7203（トヨタ自動車）",
+            key="position_code",
+        )
+        pos_entry_date = st.date_input(
+            "エントリー日",
+            value=date.today() - timedelta(days=7),
+            max_value=LATEST_DATA_DATE,
+            help="この銘柄を買った日",
+            key="position_entry_date",
+        )
+
+    with col_input2:
+        pos_entry_price = st.number_input(
+            "エントリー価格（円）",
+            min_value=0.0,
+            value=0.0,
+            step=1.0,
+            help="買った時の価格",
+            key="position_entry_price",
+        )
+        col_stop, col_profit = st.columns(2)
+        with col_stop:
+            pos_stop_loss = st.number_input(
+                "損切ライン",
+                min_value=0.0,
+                value=0.0,
+                step=1.0,
+                help="逆指値の価格",
+                key="position_stop_loss",
+            )
+        with col_profit:
+            pos_take_profit = st.number_input(
+                "利確目標",
+                min_value=0.0,
+                value=0.0,
+                step=1.0,
+                help="目標株価",
+                key="position_take_profit",
+            )
+
+    check_button = st.button("📊 売り判断を実行", type="primary", key="position_check")
+
+    if check_button:
+        if not pos_code.strip():
+            st.error("銘柄コードを入力してください")
+        elif pos_entry_price <= 0:
+            st.error("エントリー価格を入力してください")
+        else:
+            with st.spinner("売り判断シグナルを計算中..."):
+                from src.sell_signals import evaluate_sell_signals
+                from src import data_fetcher as _df
+
+                master = _df.load_master()
+                daily_all = _df.load_daily()
+
+                # 4桁→5桁変換
+                code_str = pos_code.strip()
+                code_5 = code_str if len(code_str) == 5 else f"{code_str}0"
+                mrow = master[master["Code"].astype(str).isin([code_str, code_5])]
+                if mrow.empty:
+                    st.error(f"銘柄 {code_str} がマスタに見つかりません")
+                else:
+                    actual_code = str(mrow.iloc[0]["Code"])
+                    name = str(mrow.iloc[0].get("CoName", ""))
+                    result = evaluate_sell_signals(
+                        daily_df=daily_all,
+                        code=actual_code,
+                        name=name,
+                        entry_date=pos_entry_date,
+                        entry_price=pos_entry_price,
+                        stop_loss=pos_stop_loss,
+                        take_profit=pos_take_profit,
+                    )
+
+                    if result is None:
+                        st.error("評価できませんでした。日足データが不足している可能性があります")
+                    else:
+                        # サマリー表示
+                        display_code = actual_code[:4] if len(actual_code) == 5 and actual_code.endswith("0") else actual_code
+                        st.markdown(f"### {display_code} {result.name}")
+
+                        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                        col_m1.metric("現在価格", f"{result.current_price:.0f} 円")
+                        col_m2.metric("エントリー", f"{result.entry_price:.0f} 円")
+                        col_m3.metric("損益", f"{result.pct_change:+.2f}%")
+                        col_m4.metric("保有日数", f"{result.days_held} 営業日")
+
+                        # 総合推奨度を大きく表示
+                        rec = result.recommendation
+                        if "即時損切" in rec:
+                            st.error(f"## {rec}")
+                        elif "強い売り推奨" in rec:
+                            st.warning(f"## {rec}")
+                        elif "売り検討" in rec:
+                            st.warning(f"## {rec}")
+                        elif "兆候あり" in rec:
+                            st.info(f"## {rec}")
+                        else:
+                            st.success(f"## {rec}")
+
+                        # シグナル詳細
+                        st.markdown("---")
+                        st.markdown(f"**検出された売りシグナル: {len(result.signals)}件**")
+                        if result.signals:
+                            for s in result.signals:
+                                severity_color = {
+                                    "URGENT": "🔴",
+                                    "STRONG": "🟠",
+                                    "MODERATE": "🟡",
+                                    "MILD": "🟢",
+                                }.get(s.severity, "⚪")
+                                st.markdown(f"### {severity_color} {s.label}")
+                                st.markdown(f"- {s.description}")
+                                st.caption(f"　 根拠: {s.book_reference}")
+                        else:
+                            st.success("売りシグナルなし。現在のポジションを継続してOK")
+
+                        # 損切・利確ライン情報
+                        st.markdown("---")
+                        st.markdown("**📋 設定したリスクリワード**")
+                        st.markdown(
+                            f"- 損切ライン: **{result.stop_loss:.0f} 円**"
+                            f" ({(result.stop_loss - result.entry_price) / result.entry_price * 100:+.1f}%)"
+                        )
+                        st.markdown(
+                            f"- 利確目標: **{result.take_profit:.0f} 円**"
+                            f" ({(result.take_profit - result.entry_price) / result.entry_price * 100:+.1f}%)"
+                        )
+                        if result.stop_loss > 0 and result.take_profit > 0:
+                            risk = result.entry_price - result.stop_loss
+                            reward = result.take_profit - result.entry_price
+                            if risk > 0:
+                                st.markdown(f"- RR比: **1 : {reward/risk:.2f}**")
+
+                        # メンタル管理メモ
+                        st.markdown("---")
+                        st.markdown("**📖 書籍5時限目 メンタル管理メモ**")
+                        st.markdown("""
+                        - **「頂点で利確」は結果論**。自分の利確基準を機械的に守ることが重要
+                        - **損失時の苦痛は同額の利益の2倍以上感じる**（プロスペクト理論）
+                        - **損切は遅らせない**。逆指値で自動執行が基本
+                        - **含み益でルール変更しない**。トレーリングストップは引き上げのみOK
+                        """)
+    else:
+        st.info("銘柄情報を入力して「📊 売り判断を実行」を押してください")
 
