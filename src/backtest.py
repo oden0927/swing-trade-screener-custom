@@ -42,6 +42,11 @@ class BacktestRow:
     macd: float = float("nan")
     macd_signal: float = float("nan")
     macd_hist: float = float("nan")
+    # 上位足→下位足分析（2026-05-23 追加）
+    tf_monthly: str = "—"
+    tf_weekly: str = "—"
+    tf_daily: str = "—"
+    tf_alignment: str = "—"
     returns: dict = field(default_factory=dict)
     hit_take_profit: dict = field(default_factory=dict)
     hit_stop_loss: dict = field(default_factory=dict)
@@ -174,6 +179,10 @@ def run_backtest(
                 macd=c.momentum.get("macd", float("nan")),
                 macd_signal=c.momentum.get("macd_signal", float("nan")),
                 macd_hist=c.momentum.get("macd_hist", float("nan")),
+                tf_monthly=c.multi_timeframe.get("monthly", "—"),
+                tf_weekly=c.multi_timeframe.get("weekly", "—"),
+                tf_daily=c.multi_timeframe.get("daily", "—"),
+                tf_alignment=c.multi_timeframe.get("alignment", "—"),
                 returns=ret,
                 hit_take_profit=hit_tp,
                 hit_stop_loss=hit_sl,
@@ -202,6 +211,10 @@ def run_backtest(
             "macd": r.macd,
             "macd_signal": r.macd_signal,
             "macd_hist": r.macd_hist,
+            "tf_monthly": r.tf_monthly,
+            "tf_weekly": r.tf_weekly,
+            "tf_daily": r.tf_daily,
+            "tf_alignment": r.tf_alignment,
         }
         for h in holding_days_list:
             rec[f"return_{h}d"] = r.returns.get(h)
@@ -389,11 +402,12 @@ def summarize(df: pd.DataFrame, holding_days_list: List[int]) -> str:
             wr = wins / len(no_bonus) * 100
             lines.append(f"  [加点なし]: {len(no_bonus)} 件、勝率 {wr:.1f}%、平均 {avg:+.2f}%")
         for key in [
-            "新高値ブレイク後の戻し→再上昇",      # B1
-            "三役好転",                           # B2
+            "新高値ブレイク後の戻し→再上昇",      # B1 (+10)
+            "三役好転",                           # B2 (+5)
             "パーフェクトオーダー形成初動",       # B3_Anticipate (+15) v3
             "パーフェクトオーダー形成直後（質確認済）",  # B3_Quality (+12)
-            "戻り上昇兆候のローソク足",           # B4
+            "戻り上昇兆候のローソク足",           # B4 (+12)
+            "上位足→下位足 全足一致上昇",         # B5_AlignedUp (+15) [2026-05-23]
         ]:
             sub = df[df["bonuses"].fillna("").str.contains(key, regex=False)].dropna(subset=[col])
             if sub.empty:
@@ -504,6 +518,70 @@ def summarize(df: pd.DataFrame, holding_days_list: List[int]) -> str:
                 "  - F0 と比較して、フィルタ後の勝率と期待値が両方上がっていれば「足切り条件」として有効"
                 "\n  - サンプル件数が極端に減るフィルタは過剰絞り込みの可能性あり（実運用での候補枯渇）"
                 "\n  - 期待値プラス・件数も確保 のバランスが取れているものを採用候補に"
+            )
+
+    # =========================================================
+    # 【カスタム版 2026-05-23】上位足→下位足アライメント別の勝率
+    # =========================================================
+    # 本書1時限目03 P49「上位足で方向感→下位足でトレード」の効果検証
+    # スコア計算は不変。アライメント別の勝率変化を計測。
+    if col in df.columns and "tf_alignment" in df.columns:
+        lines.append("\n" + "=" * 70)
+        lines.append("【上位足→下位足アライメント別の勝率（保有10営業日）】")
+        lines.append("=" * 70)
+        lines.append("（スコア計算は無変更。月足/週足/日足の方向一致度による勝率分布）")
+        lines.append("（本書1時限目03 p.49「上位足で方向感→下位足でトレード」の効果検証）\n")
+
+        sub_base = df.dropna(subset=[col]).copy()
+        sub_base = sub_base[sub_base["tf_alignment"].notna() & (sub_base["tf_alignment"] != "—")]
+        n_base = len(sub_base)
+        if n_base == 0:
+            lines.append("  上位足データを含む候補がありません（バックテストを再実行してください）")
+        else:
+            def _tf_stats(sub: pd.DataFrame, label: str) -> str:
+                if sub.empty:
+                    return f"  {label}: 0 件"
+                wins = (sub[col] > 0).sum()
+                losses = (sub[col] < 0).sum()
+                avg = sub[col].mean() * 100
+                wr = wins / len(sub) * 100
+                med = sub[col].median() * 100
+                avg_win = sub[sub[col] > 0][col].mean() * 100 if wins else 0
+                avg_loss = sub[sub[col] < 0][col].mean() * 100 if losses else 0
+                ev = (wr / 100) * avg_win + ((100 - wr) / 100) * avg_loss
+                share = len(sub) / n_base * 100
+                return (
+                    f"  {label}: {len(sub):>5}件 ({share:4.1f}%), "
+                    f"勝率 {wr:5.1f}%, 平均 {avg:+5.2f}%, 中央値 {med:+5.2f}%, 期待値 {ev:+5.2f}%"
+                )
+
+            lines.append("--- アライメント別 ---")
+            for align in ["ALIGNED_UP", "PARTIAL_UP", "MIXED", "PARTIAL_DOWN", "ALIGNED_DOWN"]:
+                sub = sub_base[sub_base["tf_alignment"] == align]
+                label_jp = {
+                    "ALIGNED_UP":   "🟢 全足一致(上昇)  月・週・日 全て上昇",
+                    "PARTIAL_UP":   "🟢 概ね上昇         上昇2つ、残り中立",
+                    "MIXED":        "⚪ 方向感バラバラ  上昇下落混在",
+                    "PARTIAL_DOWN": "🔴 概ね下落         下落2つ、残り中立",
+                    "ALIGNED_DOWN": "🔴 全足一致(下落)  月・週・日 全て下落",
+                }[align]
+                lines.append(_tf_stats(sub, label_jp))
+
+            lines.append("\n--- 月足単独 ---")
+            for tf in ["UPTREND", "BOX", "DOWNTREND", "UNCLEAR"]:
+                sub = sub_base[sub_base["tf_monthly"] == tf]
+                lines.append(_tf_stats(sub, f"月足={tf}"))
+
+            lines.append("\n--- 週足単独 ---")
+            for tf in ["UPTREND", "BOX", "DOWNTREND", "UNCLEAR"]:
+                sub = sub_base[sub_base["tf_weekly"] == tf]
+                lines.append(_tf_stats(sub, f"週足={tf}"))
+
+            lines.append("\n判定の目安:")
+            lines.append(
+                "  - ALIGNED_UP (全足上昇) が他より勝率高ければ、フィルタ/加点要素として有効"
+                "\n  - PARTIAL_DOWN / ALIGNED_DOWN が明らかに低勝率なら除外/減点に検討"
+                "\n  - 上位足DOWNTREND時の勝率が低ければ「月足DOWNTREND除外」条件追加検討"
             )
 
     return "\n".join(lines)

@@ -22,6 +22,15 @@
   .label.penalty { background: #fdecea; color: #8a1f1f; }
   .label.trigger { background: #fff2cc; color: #8a6b00; }
   .label.momentum { background: #ede7f6; color: #4527a0; }
+  .label.timeframe { background: #e0f2f1; color: #00695c; }
+  .timeframe-box { background: #f6fcfb; border: 1px solid #c5e5e0; border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  .tf-aligned-up { color: #1b6f3a; font-weight: bold; }
+  .tf-aligned-down { color: #8a1f1f; font-weight: bold; }
+  .tf-mixed { color: #555; }
+  .tf-uptrend { color: #1b6f3a; }
+  .tf-downtrend { color: #8a1f1f; }
+  .tf-box { color: #8a6b00; }
+  .tf-unclear { color: #777; }
   .momentum-box { background: #f9f7ff; border: 1px solid #d7cdf0; border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
   .momentum-box .zone { font-weight: bold; }
   .zone-overbought { color: #c2185b; }
@@ -124,6 +133,34 @@
     <li><span class="label penalty">減点</span> {{ p.label }}: {{ p.description }} <span class="book-ref">({{ p.book_reference }})</span></li>
     {% endfor %}
   </ul>
+
+  <h4>上位足→下位足分析（参考情報・スコア未反映）</h4>
+  <div class="timeframe-box">
+    {% set mtf = c.multi_timeframe %}
+    {% set m_lbl = mtf.get('monthly', '—') %}
+    {% set w_lbl = mtf.get('weekly', '—') %}
+    {% set d_lbl = mtf.get('daily', '—') %}
+    {% set align = mtf.get('alignment', '—') %}
+    <span class="label timeframe">月足</span>
+    <span class="tf-{{ m_lbl|lower }}"><strong>{{ m_lbl }}</strong></span>
+    ｜
+    <span class="label timeframe">週足</span>
+    <span class="tf-{{ w_lbl|lower }}"><strong>{{ w_lbl }}</strong></span>
+    ｜
+    <span class="label timeframe">日足</span>
+    <span class="tf-{{ d_lbl|lower }}"><strong>{{ d_lbl }}</strong></span>
+    <br>
+    <span class="meta">整合性:</span>
+    <span class="
+      {%- if align == 'ALIGNED_UP' %}tf-aligned-up
+      {%- elif align == 'ALIGNED_DOWN' %}tf-aligned-down
+      {%- elif align == 'PARTIAL_UP' %}tf-uptrend
+      {%- elif align == 'PARTIAL_DOWN' %}tf-downtrend
+      {%- else %}tf-mixed{% endif %}">
+      {{ c.timeframe_alignment_label }}
+    </span>
+    <span class="meta">（書籍1時限目03 p.49「上位足で方向感→下位足でトレード」）</span>
+  </div>
 
   <h4>モメンタム指標（参考情報・スコア未反映）</h4>
   <div class="momentum-box">

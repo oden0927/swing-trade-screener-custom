@@ -15,9 +15,9 @@ from tqdm import tqdm
 
 import config
 from . import data_fetcher
-from .environment import EnvironmentResult, judge_environment, judge_market_regime
+from .environment import EnvironmentResult, judge_environment, judge_market_regime, evaluate_multi_timeframe
 from .indicators import detect_recent_levels, enrich_one
-from .patterns import PatternResult, evaluate as eval_patterns
+from .patterns import PatternMatch, PatternResult, evaluate as eval_patterns
 from .risk_reward import RiskReward, compute_risk_reward
 from .triggers import TriggerSignal, evaluate_triggers
 from .universe import (
@@ -48,6 +48,9 @@ class Candidate:
     notes: List[str] = field(default_factory=list)
     # モメンタム指標（カスタム版で追加：計算・表示のみ、スコア未反映）
     momentum: Dict[str, float] = field(default_factory=dict)
+    # 上位足→下位足分析（カスタム版2026-05-23：計算・表示のみ、スコア未反映）
+    # 本書1時限目03 P49「上位足で方向感を把握、下位足でトレード判断」を実装
+    multi_timeframe: Dict[str, str] = field(default_factory=dict)
 
     @property
     def rsi_zone(self) -> str:
@@ -71,6 +74,18 @@ class Candidate:
         if macd is None or sig is None or pd.isna(macd) or pd.isna(sig):
             return "—"
         return "シグナル上抜け（強気）" if macd > sig else "シグナル下抜け（弱気）"
+
+    @property
+    def timeframe_alignment_label(self) -> str:
+        """上位足→下位足アライメントの日本語ラベル。"""
+        align = self.multi_timeframe.get("alignment", "MIXED")
+        return {
+            "ALIGNED_UP":    "🟢 全足一致(上昇)",
+            "ALIGNED_DOWN":  "🔴 全足一致(下落)",
+            "PARTIAL_UP":    "🟢 概ね上昇",
+            "PARTIAL_DOWN":  "🔴 概ね下落",
+            "MIXED":         "⚪ 方向感バラバラ",
+        }.get(align, align)
 
     @property
     def has_buy_signal(self) -> bool:
@@ -108,6 +123,28 @@ def _evaluate_one(
     triggers = evaluate_triggers(enriched, resistances, supports)
     rr = compute_risk_reward(enriched, supports, resistances)
 
+    # 上位足→下位足アライメント判定（先に計算してパターンに反映）
+    # 3年実証 (2026-05-23): ALIGNED_UP は 1231件、勝率61.2%、+2.20% (ベース+9.2pt)
+    try:
+        mtf_result = evaluate_multi_timeframe(enriched)
+        multi_timeframe = {
+            "monthly": mtf_result["monthly"].label,
+            "weekly": mtf_result["weekly"].label,
+            "daily": mtf_result["daily"].label,
+            "alignment": mtf_result["alignment"],
+            "alignment_score": str(mtf_result["alignment_score"]),
+        }
+        # ALIGNED_UP の場合は加点要素として pattern.bonus に追加
+        if mtf_result["alignment"] == "ALIGNED_UP":
+            pattern.bonus.append(PatternMatch(
+                "B5_AlignedUp", "上位足→下位足 全足一致上昇",
+                "月足・週足・日足が全てUPTREND（フラクタル構造の最強パターン）",
+                "1時限目03 p.49 / カスタム版実証3年: 勝率61.2%・+2.20% (ベース+9.2pt)",
+                score=15.0,
+            ))
+    except Exception:
+        multi_timeframe = {}
+
     score = pattern.total_score
     # トリガー別の重み（最新3年バックテスト 2026-05-23 に基づく）
     # MA5_BREAK     : 9073件、52.9% (ベース52.4%、+0.5pt) → +10 維持
@@ -144,6 +181,7 @@ def _evaluate_one(
         "macd_signal": float(last_row.get("MACD_Signal", float("nan"))),
         "macd_hist": float(last_row.get("MACD_Hist", float("nan"))),
     }
+    # multi_timeframe は score 計算前に計算済み（B5_AlignedUp 加点のため）
 
     return Candidate(
         code=code,
@@ -159,6 +197,7 @@ def _evaluate_one(
         earnings_sensitive=earnings_sensitive,
         eval_date=eval_date,
         momentum=momentum,
+        multi_timeframe=multi_timeframe,
     )
 
 

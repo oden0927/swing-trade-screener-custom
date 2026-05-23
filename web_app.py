@@ -266,6 +266,19 @@ with tab_screen:
                             st.markdown(f"- 🟡 `{t.signal_type}`: {t.description}")
                             st.caption(f"　 {t.book_reference}")
 
+                        st.markdown("**上位足→下位足分析**（参考・スコア未反映）")
+                        mtf = c.multi_timeframe
+                        m_lbl = mtf.get("monthly", "—")
+                        w_lbl = mtf.get("weekly", "—")
+                        d_lbl = mtf.get("daily", "—")
+                        tf_emoji = {"UPTREND": "🟢", "DOWNTREND": "🔴", "BOX": "🟡", "UNCLEAR": "⚪"}
+                        st.markdown(
+                            f"- 月足: {tf_emoji.get(m_lbl, '⚪')} **{m_lbl}** ｜ "
+                            f"週足: {tf_emoji.get(w_lbl, '⚪')} **{w_lbl}** ｜ "
+                            f"日足: {tf_emoji.get(d_lbl, '⚪')} **{d_lbl}**"
+                        )
+                        st.caption(f"　整合性: {c.timeframe_alignment_label}（書籍 1時限目03 p.49）")
+
                         st.markdown("**モメンタム指標**（参考・スコア未反映）")
                         rsi_val = c.momentum.get("rsi")
                         macd_val = c.momentum.get("macd")
