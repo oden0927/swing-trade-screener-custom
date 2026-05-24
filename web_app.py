@@ -756,12 +756,21 @@ with tab_quiz:
                         chart_caption = "✅ 答え：シグナル日 +30日後までの実績"
 
                     with st.spinner(f"問題 {i} のチャート生成中..."):
-                        b64 = render_as_base64(
-                            c, daily_for_charts,
-                            lookback=120,
-                            lookforward=30,
-                            force_hide_future=not is_revealed,
-                        )
+                        try:
+                            b64 = render_as_base64(
+                                c, daily_for_charts,
+                                lookback=120,
+                                lookforward=30,
+                                force_hide_future=not is_revealed,
+                            )
+                        except TypeError:
+                            # 古いchart_renderer.pyへのフォールバック（force_hide_futureなし）
+                            # 答え非表示時は lookforward=0 で擬似的に未来を隠す
+                            b64 = render_as_base64(
+                                c, daily_for_charts,
+                                lookback=120,
+                                lookforward=30 if is_revealed else 0,
+                            )
                     if b64:
                         st.markdown(
                             f'<img src="data:image/png;base64,{b64}" '
