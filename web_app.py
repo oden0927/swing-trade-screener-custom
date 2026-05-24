@@ -175,11 +175,9 @@ with tab_screen:
             """)
 
     # ----- メインコンテンツ -----
-    if not run_button:
-        # 初期画面は何も表示せず、ユーザーがサイドバーから操作するのを待つ
-        # （使い方やスコアの目安はサイドバーの「？」ヘルプおよびナレッジベースに集約）
-        pass
-    else:
+    # ボタンが押された時に新しくスクリーニングを実行し、結果をsession_stateに保存
+    # （クイズボタン等で再実行時も結果が消えないように）
+    if run_button:
         from src.screener import screen_at
         from src import data_fetcher
 
@@ -193,6 +191,27 @@ with tab_screen:
                 max_candidates=limit if limit > 0 else None,
                 show_progress=False,
             )
+
+        # session_state に保存（クイズボタン等の再実行で結果を保持）
+        st.session_state["screen_results"] = candidates
+        st.session_state["screen_target_date"] = target_date
+        st.session_state["screen_quiz_mode"] = quiz_mode
+        st.session_state["screen_show_charts"] = show_charts
+        # 過去のクイズ回答状態をクリア
+        keys_to_clear = [k for k in list(st.session_state.keys()) if k.startswith("quiz_reveal_")]
+        for k in keys_to_clear:
+            del st.session_state[k]
+
+    # session_state に結果があれば表示（実行ボタンが押された後・クイズ操作時の両方で機能）
+    if "screen_results" not in st.session_state:
+        # 初期画面は何も表示せず、ユーザーがサイドバーから操作するのを待つ
+        pass
+    else:
+        candidates = st.session_state["screen_results"]
+        target_date = st.session_state.get("screen_target_date")
+        quiz_mode = st.session_state.get("screen_quiz_mode", False)
+        show_charts = st.session_state.get("screen_show_charts", True)
+        from src import data_fetcher
 
         if not candidates:
             st.warning("条件に合致する銘柄が見つかりませんでした。地合いが下落相場の可能性もあります。")
